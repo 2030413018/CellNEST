@@ -46,6 +46,10 @@ elif [ $1 = "preprocess_intra" ]
 then
   shift
   python -u data_preprocess_intra_CellNEST.py $@
+elif [ $1 = "preprocess_scrna" ] 
+then
+  shift
+  python -u data_preprocess_CellNEST.py --data_type scrna $@
 elif [ $1 = "downstream" ] 
 then
   shift
