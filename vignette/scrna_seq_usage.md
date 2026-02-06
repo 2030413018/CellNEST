@@ -45,7 +45,7 @@ cellnest preprocess_scrna --data_name='my_scrna_dataset' \
     --data_from='path/to/my_data.h5ad'
 ```
 
-You can tune the number of neighbors with `--k` (default: 50 or number of cells minus 1, whichever is smaller).
+You can tune the number of neighbors with `--k` (default: 50). The value is automatically clamped to not exceed the number of cells minus 1.
 
 ### Step 3: Train, Postprocess, Visualize
 

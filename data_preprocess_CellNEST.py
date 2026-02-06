@@ -151,9 +151,8 @@ if __name__ == "__main__":
 
             # For scRNA-seq, force KNN neighborhood (no physical distance threshold)
             args.distance_measure = 'knn'
-            if args.k == 50:
-                # Adjust default k for typical scRNA-seq cell counts
-                args.k = min(50, cell_barcode.shape[0] - 1)
+            # Ensure k does not exceed the number of available cells
+            args.k = min(args.k, cell_barcode.shape[0] - 1)
             # Disable juxtacrine filtering (no physical contact concept in scRNA-seq)
             args.block_juxtacrine = 1
             print('scRNA-seq mode: using KNN (k=%d) neighborhood; juxtacrine filtering disabled'%args.k)
