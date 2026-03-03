@@ -140,6 +140,7 @@ For a detailed explanation of the available parameters and their usage, please s
 5. [CellNEST on deconvoluted Spatial Transcriptomics data](vignette/deconvolute_ST.md) 
 6. [CellNEST on MERFISH data after gene imputation using scRNA-seq data](vignette/integrate_scRNAseq_merfish.md)
 7. [Convert ST data in any format to anndata for easy manipulation by CellNEST](vignette/convert_to_anndata.md)
+8. [Running CellNEST on single-cell RNA-seq data without spatial coordinates](vignette/scrna_seq_usage.md)
 
    
     

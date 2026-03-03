@@ -27,7 +27,7 @@ if __name__ == "__main__":
     parser.add_argument( '--data_name', type=str, help='Name of the dataset', required=True)  
     parser.add_argument( '--data_from', type=str, required=True, help='Path to the dataset to read from. Space Ranger outs/ folder is preferred. Otherwise, provide the *.mtx file of the gene expression matrix.')
     ################# default is set ################################################################
-    parser.add_argument( '--data_type', type=str, default='visium', help='Set one of these two types [visium, anndata]')
+    parser.add_argument( '--data_type', type=str, default='visium', help='Set one of [visium, anndata, scrna]. Use scrna for single-cell RNA-seq without spatial coordinates; positions will be derived from expression via PCA and UMAP.')
     parser.add_argument( '--data_to', type=str, default='input_graph/', help='Path to save the input graph (to be passed to GAT)')
     parser.add_argument( '--metadata_to', type=str, default='metadata/', help='Path to save the metadata')
     parser.add_argument( '--filter_min_cell', type=int, default=1 , help='Minimum number of cells for gene filtering') 
@@ -119,6 +119,46 @@ if __name__ == "__main__":
             print('Number of barcodes: %d'%cell_barcode.shape[0])
             print('Applying quantile normalization')
             temp = qnorm.quantile_normalize(np.transpose(sparse.csr_matrix.toarray(adata_h5.X)))  #https://en.wikipedia.org/wiki/Quantile_normalization
+            cell_vs_gene = np.transpose(temp)
+        elif args.data_type == 'scrna':
+            # Single-cell RNA-seq mode: no spatial coordinates available.
+            # We load .h5ad, derive 2D positions from expression data using
+            # scanpy's PCA + UMAP pipeline, and force KNN-based neighborhood.
+            adata_h5 = sc.read_h5ad(args.data_from)
+            print('scRNA-seq input data read done')
+            gene_count_before = len(list(adata_h5.var_names))
+            sc.pp.filter_genes(adata_h5, min_cells=args.filter_min_cell)
+            gene_count_after = len(list(adata_h5.var_names))
+            print('Gene filtering done. Number of genes reduced from %d to %d'%(gene_count_before, gene_count_after))
+            gene_ids = list(adata_h5.var_names)
+            cell_barcode = np.array(adata_h5.obs_names)
+            print('Number of cells: %d'%cell_barcode.shape[0])
+
+            # Derive 2D positions from expression since spatial info is absent
+            print('Computing 2D embedding from expression data (PCA + UMAP) ...')
+            adata_for_embed = adata_h5.copy()
+            sc.pp.normalize_total(adata_for_embed, target_sum=1e4)
+            sc.pp.log1p(adata_for_embed)
+            n_pcs = min(50, adata_for_embed.shape[0] - 1, adata_for_embed.shape[1] - 1)
+            sc.tl.pca(adata_for_embed, n_comps=n_pcs)
+            n_nb = min(30, adata_for_embed.shape[0] - 1)
+            sc.pp.neighbors(adata_for_embed, n_neighbors=n_nb, n_pcs=n_pcs)
+            sc.tl.umap(adata_for_embed)
+            coordinates = np.array(adata_for_embed.obsm['X_umap'], dtype=np.float64)
+            del adata_for_embed
+            gc.collect()
+            print('2D embedding computed for %d cells'%coordinates.shape[0])
+
+            # For scRNA-seq, force KNN neighborhood (no physical distance threshold)
+            args.distance_measure = 'knn'
+            # Ensure k does not exceed the number of available cells
+            args.k = min(args.k, cell_barcode.shape[0] - 1)
+            # Disable juxtacrine filtering (no physical contact concept in scRNA-seq)
+            args.block_juxtacrine = 1
+            print('scRNA-seq mode: using KNN (k=%d) neighborhood; juxtacrine filtering disabled'%args.k)
+
+            print('Applying quantile normalization')
+            temp = qnorm.quantile_normalize(np.transpose(sparse.csr_matrix.toarray(adata_h5.X)))
             cell_vs_gene = np.transpose(temp)
     else: # Data is not available in Space Ranger output format
         # read the mtx file
