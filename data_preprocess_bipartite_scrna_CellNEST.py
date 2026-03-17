@@ -4,20 +4,29 @@
 # scRNA-seq 专用双分图构建脚本——用于通路串扰（Pathway Crosstalk）检测。
 #
 # ============================================================================
-# 与空间转录组版本的核心区别
-# ============================================================================
-# 1. 仅支持 scRNA-seq 数据（.h5ad 格式），无需空间坐标。
-# 2. 邻域关系由 PCA 表达空间的 KNN 确定（而非物理距离），自动禁用 juxtacrine 过滤。
-# 3. Node Type 2（细胞方向节点）使用**细胞类型对**（如"巨噬细胞→T细胞"），
-#    而非单个细胞对（细胞 i→细胞 j）。
-#    这样做的好处：
-#      · 大幅减少节点数量，提高计算效率；
-#      · 结果更具可解释性（直接回答"哪些L-R通路在某类细胞间协同激活"）；
-#      · 通过对同类型细胞对的通讯分数取均值，降低个体细胞噪音。
+# 设计思路：为什么不用 PCA+KNN 邻域？
 # ============================================================================
 #
+# 在空间转录组中，"邻域"有明确的物理意义：相邻细胞才可能发生旁分泌（paracrine）
+# 或细胞接触（juxtacrine）信号传导。因此需要 KNN/距离阈值来筛选细胞对。
+#
+# 在 scRNA-seq 中，我们**没有物理坐标**，目标是检测**不同细胞类型群体之间**
+# 的分子通讯模式（Pathway Crosstalk）。此时：
+#
+#   · PCA+KNN 会将表达相似的细胞聚在一起，导致同类型细胞之间连边
+#     （即把细胞内相似性误认为通讯关系），偏离跨细胞类型通讯的目标。
+#   · 对于群体水平（population-level）通讯，更合适的问法是：
+#     "巨噬细胞群体是否高表达 CCL2，且 T 细胞群体是否高表达 CCR2？"
+#     ——与 CellChat、CellPhoneDB、NicheNet 的设计哲学一致。
+#
+# 本脚本采用**全枚举（full enumeration）**策略：
+#   对每个细胞类型对 (typeA → typeB)，遍历所有 typeA 细胞和 typeB 细胞，
+#   只要配体/受体超过各自细胞的百分位阈值，即记为一次活跃通讯，
+#   并以均值汇总为该细胞类型对的通讯分数。
+#
+# ============================================================================
 # 图结构设计
-# ==========
+# ============================================================================
 #   节点类型 1 —— 信号节点（Signal nodes，索引 0 … num_lr_nodes-1）
 #       每个节点代表数据集中出现的一个唯一配受体对（如 CCL2-CCR2）。
 #
@@ -28,12 +37,13 @@
 #
 #   连边规则
 #       节点间只有**跨类型**连边，同类型节点之间不连线。
-#       当配受体对 L 在某细胞类型对 (typeA → typeB) 之间有活跃通讯时，
-#       L 对应的信号节点与该细胞类型对节点之间画一条边。
-#       边特征：[平均距离权重, 平均L-R共表达分数, lr_pair_id]
+#       当配受体对 L 在某细胞类型对 (typeA → typeB) 之间存在至少一对活跃
+#       通讯细胞时，信号节点 L 与该细胞类型对节点之间画一条双向边。
+#       边特征：[1.0（无距离概念，统一权重）, 平均L-R共表达分数, lr_pair_id]
 #
+# ============================================================================
 # GAT 目标
-# ========
+# ============================================================================
 #   找出哪些配受体通路是协同工作的（Pathway Crosstalk）。
 #   训练后，嵌入向量相近的信号节点倾向于在相同的细胞类型间协同激活，
 #   即属于同一"共信号模块"（如炎症模块、增殖模块）。
@@ -50,12 +60,11 @@ import argparse
 import os
 import scanpy as sc
 import gc
-from sklearn.neighbors import NearestNeighbors
 print('用户参数读取中...')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description='CellNEST scRNA-seq 双分图预处理 —— 通路串扰检测')
+        description='CellNEST scRNA-seq 双分图预处理 —— 通路串扰检测（全枚举跨细胞类型模式）')
 
     # =================== 必填参数 ===========================================
     parser.add_argument('--data_name', type=str, required=True,
@@ -76,28 +85,17 @@ if __name__ == "__main__":
     parser.add_argument('--threshold_gene_exp', type=float, default=98,
                         help='基因表达活跃阈值百分位数（默认 98）。'
                              '高于该百分位数的基因被认为在该细胞中活跃表达。')
-    parser.add_argument('--n_neighbors', type=int, default=50,
-                        help='KNN 邻域近邻数（默认 50）。'
-                             '自动裁剪为不超过细胞总数 - 1。'
-                             '若指定 --k 则以该值为准（兼容旧版参数名）。')
-    parser.add_argument('--n_pcs', type=int, default=50,
-                        help='PCA 降维维度（默认 50）。'
-                             '自动裁剪为不超过 min(细胞数-1, 基因数-1)。')
     parser.add_argument('--block_autocrine', type=int, default=0,
-                        help='设为 1 则忽略自分泌信号（同一细胞类型自身发出并接收）')
+                        help='设为 1 则忽略单细胞层面的自分泌信号（同一细胞同时作为发送方和接收方）。'
+                             '注意：该参数不影响同类型不同细胞之间的通讯（见 --block_same_type）。')
+    parser.add_argument('--block_same_type', type=int, default=0,
+                        help='设为 1 则忽略同一细胞类型内部的通讯（如 Tcell→Tcell）。'
+                             '设为 0（默认）则保留同类型细胞间通讯（旁分泌同类）。')
     parser.add_argument('--database_path', type=str,
                         default='database/CellNEST_database.csv',
                         help='配受体数据库路径，默认为 CellNEST 内置数据库 '
                              '（CellChat + NicheNet 合并版）')
     args = parser.parse_args()
-
-    def _clamp_positive_int(value, max_allowed, param_name):
-        """将正整数参数裁剪到 [1, max_allowed] 范围，超出时打印警告。"""
-        clamped = min(value, max_allowed)
-        if clamped < value:
-            print('警告：%s=%d 超过上限 %d，已自动调整为 %d'
-                  % (param_name, value, max_allowed, clamped))
-        return clamped
 
     # =================== 路径初始化 ========================================
     if args.data_to == 'input_graph/':
@@ -143,39 +141,17 @@ if __name__ == "__main__":
     cell_vs_gene = np.transpose(temp)
     print('量化归一化完毕，表达矩阵维度：', cell_vs_gene.shape)
 
-    # =================== PCA + KNN 邻域构建 =================================
-    print('正在计算 PCA 嵌入以构建 KNN 邻域...')
-    adata_embed = adata.copy()
-    sc.pp.normalize_total(adata_embed, target_sum=1e4)
-    sc.pp.log1p(adata_embed)
-
-    n_pcs = _clamp_positive_int(args.n_pcs, min(n_cells - 1, len(gene_ids) - 1), '--n_pcs')
-    sc.tl.pca(adata_embed, n_comps=n_pcs)
-    pca_coords = np.array(adata_embed.obsm['X_pca'], dtype=np.float64)
-    del adata_embed
-    gc.collect()
-    print('PCA 嵌入计算完毕，维度：%d' % n_pcs)
-
-    k_actual = _clamp_positive_int(args.n_neighbors, n_cells - 1, '--n_neighbors')
-    print('正在构建 KNN 邻域（k=%d）...' % k_actual)
-    nbrs = NearestNeighbors(n_neighbors=k_actual, algorithm='kd_tree', n_jobs=-1)
-    nbrs.fit(pca_coords)
-    distances, indices = nbrs.kneighbors(pca_coords)
-    print('KNN 邻域构建完毕')
-
-    # 基于距离计算归一化权重（距离越近权重越大）
-    print('正在计算邻域距离权重...')
-    weightdict_i_to_j = defaultdict(dict)
-    for cell_idx in range(n_cells):
-        max_val = np.max(distances[cell_idx, :])
-        min_val = np.min(distances[cell_idx, :])
-        denom = max_val - min_val if (max_val - min_val) > 0 else 1.0
-        for neigh_idx in range(indices.shape[1]):
-            neigh_cell_idx = indices[cell_idx][neigh_idx]
-            d = distances[cell_idx][neigh_idx]
-            flipped = 1.0 - (d - min_val) / denom
-            # i = neigh_cell_idx 发送信号给 j = cell_idx
-            weightdict_i_to_j[neigh_cell_idx][cell_idx] = flipped
+    # =================== 构建细胞类型索引 ====================================
+    # cells_of_type[cell_type] = 该类型所有细胞在 cell_barcode 中的行索引列表。
+    # 这是全枚举策略的基础数据结构：
+    #   对每个 (typeA, typeB) 对，我们遍历所有 typeA 细胞（潜在发送方）和
+    #   所有 typeB 细胞（潜在接收方），而无需依赖任何距离或邻域信息。
+    print('正在构建细胞类型索引...')
+    cells_of_type = defaultdict(list)
+    for idx, ct in enumerate(cell_type_array):
+        cells_of_type[ct].append(idx)
+    for ct in unique_cell_types:
+        print('  %s：%d 个细胞' % (ct, len(cells_of_type[ct])))
 
     # =================== 构建基因辅助信息 ====================================
     gene_info = {gene: '' for gene in gene_ids}
@@ -241,54 +217,78 @@ if __name__ == "__main__":
         cell_percentile.append(cutoff)
     print('基因表达阈值计算完毕')
 
-    # =================== 遍历所有活跃通讯 ====================================
-    # 对每个 KNN 连接的细胞对 (i→j) 及每个活跃 L-R 对，
-    # 以"细胞类型对 (typeA→typeB)"为单位汇总通讯分数。
+    # =================== 遍历所有跨细胞类型活跃通讯（全枚举策略） ==============
+    # -------------------------------------------------------------------------
+    # 策略说明：
+    #   对每个配体基因 gene，找出所有高表达该配体的细胞（发送方候选）。
+    #   对每个受体基因 gene_rec，找出所有高表达该受体的细胞（接收方候选）。
+    #   以"细胞类型对 (typeA→typeB)"为单位，对所有满足条件的（发送方, 接收方）
+    #   细胞对的通讯分数（配体表达量 × 受体表达量）取均值。
     #
-    # 数据结构：
-    #   ct_pair_lr_score_sum[(ct_pair_key, lr_id)] = 总分
-    #   ct_pair_lr_count[(ct_pair_key, lr_id)]     = 计数
-    #   ct_pair_dist_sum[ct_pair_key]               = 距离权重之和
-    #   ct_pair_dist_count[ct_pair_key]             = 计数
-    # ========================================================================
-    print('正在枚举所有活跃配受体通讯...')
+    #   与 CellChat/CellPhoneDB 的设计一致：通讯是群体行为，
+    #   只要 typeA 中的某细胞高表达配体且 typeB 中的某细胞高表达受体，
+    #   即认为 typeA→typeB 存在该配受体通路的信号传导潜力。
+    #
+    # 注意：
+    #   · 无需任何距离/邻域信息，适用于标准 scRNA-seq 数据。
+    #   · dist_weight 统一设为 1.0（所有细胞类型对平等对待，无距离惩罚）。
+    #   · --block_same_type=1 可排除同类型内通讯（如 Macro→Macro）。
+    #   · --block_autocrine=1 可排除同一细胞发送并接收同一信号的情形。
+    # -------------------------------------------------------------------------
+    print('正在枚举所有跨细胞类型活跃配受体通讯（全枚举模式，无KNN限制）...')
 
     ct_pair_lr_score_sum = defaultdict(float)
     ct_pair_lr_count = defaultdict(int)
-    ct_pair_dist_sum = defaultdict(float)
-    ct_pair_dist_count = defaultdict(int)
 
     ligand_list = list(ligand_dict_dataset.keys())
     total_active = 0
 
     for g_idx, gene in enumerate(ligand_list):
-        for i in weightdict_i_to_j:
-            if cell_vs_gene[i][gene_index[gene]] < cell_percentile[i]:
-                continue
-            type_i = cell_type_array[i]
-            for j in weightdict_i_to_j[i]:
-                if args.block_autocrine == 1 and i == j:
-                    continue
-                type_j = cell_type_array[j]
-                ct_pair_key = (type_i, type_j)
-                dist_w = weightdict_i_to_j[i][j]
+        gene_col = gene_index[gene]
 
-                for gene_rec in ligand_dict_dataset[gene]:
-                    if cell_vs_gene[j][gene_index[gene_rec]] < cell_percentile[j]:
+        # 找出所有高表达该配体的细胞（发送方候选）
+        sender_cells = [i for i in range(n_cells)
+                        if cell_vs_gene[i][gene_col] >= cell_percentile[i]]
+
+        if len(sender_cells) == 0:
+            print('%d/%d 配体基因已处理' % (g_idx + 1, len(ligand_list)), end='\r')
+            continue
+
+        for gene_rec in ligand_dict_dataset[gene]:
+            rec_col = gene_index[gene_rec]
+            relation_id = l_r_pair[gene][gene_rec]
+
+            # 找出所有高表达该受体的细胞（接收方候选）
+            receiver_cells = [j for j in range(n_cells)
+                              if cell_vs_gene[j][rec_col] >= cell_percentile[j]]
+
+            if len(receiver_cells) == 0:
+                continue
+
+            for i in sender_cells:
+                type_i = cell_type_array[i]
+                score_i = cell_vs_gene[i][gene_col]
+
+                for j in receiver_cells:
+                    # 过滤：自分泌（同一细胞）
+                    if args.block_autocrine == 1 and i == j:
                         continue
 
-                    communication_score = (cell_vs_gene[i][gene_index[gene]]
-                                           * cell_vs_gene[j][gene_index[gene_rec]])
+                    type_j = cell_type_array[j]
+
+                    # 过滤：同类型内通讯
+                    if args.block_same_type == 1 and type_i == type_j:
+                        continue
+
+                    ct_pair_key = (type_i, type_j)
+                    communication_score = score_i * cell_vs_gene[j][rec_col]
+
                     if communication_score <= 0:
                         continue
 
-                    relation_id = l_r_pair[gene][gene_rec]
                     key = (ct_pair_key, relation_id)
-
                     ct_pair_lr_score_sum[key] += communication_score
                     ct_pair_lr_count[key] += 1
-                    ct_pair_dist_sum[ct_pair_key] += dist_w
-                    ct_pair_dist_count[ct_pair_key] += 1
                     total_active += 1
 
         print('%d/%d 配体基因已处理' % (g_idx + 1, len(ligand_list)), end='\r')
@@ -345,10 +345,9 @@ if __name__ == "__main__":
         count = ct_pair_lr_count[(ct_pk, relation_id)]
         mean_score = score_sum / count
 
-        # 计算该细胞类型对的平均距离权重
-        d_sum = ct_pair_dist_sum[ct_pk]
-        d_cnt = ct_pair_dist_count[ct_pk]
-        mean_dist = d_sum / d_cnt if d_cnt > 0 else 0.0
+        # dist_weight 统一设为 1.0：
+        # scRNA-seq 无物理距离概念，所有细胞类型对等权重。
+        mean_dist = 1.0
 
         lr_node_id = relation_id
         cp_node_id = num_lr_nodes + ct_pair_to_id[ct_pk]
@@ -409,7 +408,7 @@ if __name__ == "__main__":
     # 保存细胞类型注释（供后续可视化使用）
     df_ct = pd.DataFrame({'barcode': cell_barcode,
                           'cell_type': cell_type_array})
-    df_ct.to_csv(args.metadata_to + 'cell_type_' + args.data_name + '.csv',
+    df_ct.to_csv(args.metadata_to + 'cell_type_annotation_' + args.data_name + '.csv',
                  index=False)
 
     print('数据写入完毕')

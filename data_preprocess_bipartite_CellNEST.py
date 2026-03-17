@@ -56,9 +56,13 @@ if __name__ == "__main__":
                              'matrix.')
     ################# default is set ################################################################
     parser.add_argument('--data_type', type=str, default='visium',
-                        help='Set one of [visium, anndata, scrna]. Use scrna for single-cell '
-                             'RNA-seq without spatial coordinates; positions will be derived from '
-                             'expression via PCA and UMAP.')
+                        help='Set one of [visium, anndata, scrna]. '
+                             'NOTE: for scRNA-seq pathway crosstalk detection, it is strongly '
+                             'recommended to use the dedicated script '
+                             'data_preprocess_bipartite_scrna_CellNEST.py instead, which uses '
+                             'a full cross-cell-type enumeration strategy (no PCA/KNN bias). '
+                             'The scrna option here only derives pseudo-coordinates via PCA+UMAP '
+                             'for legacy compatibility.')
     parser.add_argument('--data_to', type=str, default='input_graph/',
                         help='Path to save the input graph (to be passed to GAT)')
     parser.add_argument('--metadata_to', type=str, default='metadata/',
