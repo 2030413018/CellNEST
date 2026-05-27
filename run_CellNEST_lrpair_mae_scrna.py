@@ -77,6 +77,13 @@ class LRPairMaskedAutoencoder(nn.Module):
 
 def sample_mask(x, mask_ratio, mask_nonzero_only):
     """对输入矩阵采样随机掩码。"""
+    if not 0.0 <= mask_ratio <= 1.0:
+        raise ValueError(
+            f'mask_ratio must be in [0, 1], but got {mask_ratio}.'
+        )
+    if mask_ratio == 0.0:
+        return torch.zeros_like(x, dtype=torch.bool)
+
     if mask_nonzero_only:
         candidate = (x != 0)
         if candidate.sum().item() == 0:
