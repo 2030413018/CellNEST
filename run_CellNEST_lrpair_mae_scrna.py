@@ -159,7 +159,7 @@ if __name__ == "__main__":
         torch.manual_seed(args.seed)
         random.seed(args.seed)
         np.random.seed(args.seed)
-        print('已设置随机种子：%d' % args.seed)
+        print('Manual seed set: %d / 已设置随机种子：%d' % (args.seed, args.seed))
 
     # =================== 创建输出目录 =========================================
     if not os.path.exists(args.embedding_path):
@@ -167,23 +167,23 @@ if __name__ == "__main__":
     if not os.path.exists(args.model_path):
         os.makedirs(args.model_path)
 
-    print('========================= 参数摘要 ==========================')
-    print('数据集：%s' % args.data_name)
-    print('训练数据：%s' % args.training_data)
-    print('模型名称：%s' % args.model_name)
-    print('嵌入维度：%d' % args.embedding_dim)
-    print('Transformer 层数：%d' % args.num_layers)
-    print('注意力头数：%d' % args.num_heads)
-    print('掩码比例：%.2f' % args.mask_ratio)
-    print('学习率：%g' % args.lr_rate)
-    print('训练轮次：%d' % args.num_epoch)
-    print('=============================================================')
+    print('========================= Parameters / 参数摘要 ==========================')
+    print('Dataset: %s / 数据集：%s' % (args.data_name, args.data_name))
+    print('Training data: %s / 训练数据：%s' % (args.training_data, args.training_data))
+    print('Model name: %s / 模型名称：%s' % (args.model_name, args.model_name))
+    print('Embedding dim: %d / 嵌入维度：%d' % (args.embedding_dim, args.embedding_dim))
+    print('Transformer layers: %d / Transformer 层数：%d' % (args.num_layers, args.num_layers))
+    print('Attention heads: %d / 注意力头数：%d' % (args.num_heads, args.num_heads))
+    print('Mask ratio: %.2f / 掩码比例：%.2f' % (args.mask_ratio, args.mask_ratio))
+    print('Learning rate: %g / 学习率：%g' % (args.lr_rate, args.lr_rate))
+    print('Epochs: %d / 训练轮次：%d' % (args.num_epoch, args.num_epoch))
+    print('==========================================================================')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print('使用设备：%s' % device)
+    print('Using device: %s / 使用设备：%s' % (device, device))
 
     # =================== 加载 LR Token 矩阵 ===================================
-    print('正在加载 LR Token 矩阵...')
+    print('Loading LR token matrix... / 正在加载 LR Token 矩阵...')
     with gzip.open(args.training_data, 'rb') as fp:
         payload = pickle.load(fp)
     X_lr = payload[0]
@@ -191,7 +191,8 @@ if __name__ == "__main__":
     cp_id_to_pair = payload[2]
 
     num_lr, num_cp = X_lr.shape
-    print('Token 矩阵维度：N=%d, M=%d' % (num_lr, num_cp))
+    print('Token matrix shape: N=%d, M=%d / Token 矩阵维度：N=%d, M=%d'
+          % (num_lr, num_cp, num_lr, num_cp))
 
     X_tensor = torch.tensor(X_lr, dtype=torch.float, device=device)
     X_tensor = X_tensor.unsqueeze(0)  # batch size = 1
@@ -214,7 +215,7 @@ if __name__ == "__main__":
     best_epoch = -1
 
     # =================== 训练循环 =============================================
-    print('开始训练 MAE...')
+    print('Training MAE... / 开始训练 MAE...')
     for epoch in range(1, args.num_epoch + 1):
         model.train()
         optimizer.zero_grad()
@@ -247,7 +248,8 @@ if __name__ == "__main__":
                         'model_state_dict': model.state_dict(),
                         'loss': best_loss}, model_path)
 
-    print('训练完毕。最佳损失 %.6f (epoch %d)' % (best_loss, best_epoch))
+    print('Training complete. Best loss %.6f (epoch %d) / 训练完毕。最佳损失 %.6f (epoch %d)'
+          % (best_loss, best_epoch, best_loss, best_epoch))
 
     # =================== 导出嵌入 =============================================
     model.eval()
@@ -261,5 +263,6 @@ if __name__ == "__main__":
     with gzip.open(embed_path, 'wb') as fp:
         pickle.dump(embeddings, fp)
 
-    print('嵌入向量已保存至：%s' % embed_path)
-    print('下一步建议：运行 cluster_lrpair_mae_modules.py 进行 Leiden 聚类。')
+    print('Embeddings saved: %s / 嵌入向量已保存至：%s' % (embed_path, embed_path))
+    print('Next: run cluster_lrpair_mae_modules.py for Leiden clustering. / '
+          '下一步建议：运行 cluster_lrpair_mae_modules.py 进行 Leiden 聚类。')

@@ -30,7 +30,7 @@
 #   记录 M、N 及筛选阈值等摘要信息
 # ============================================================================
 
-print('正在加载依赖包...')
+print('Loading dependencies... / 正在加载依赖包...')
 import numpy as np
 import pickle
 from scipy import sparse
@@ -41,7 +41,7 @@ import gzip
 import argparse
 import os
 import scanpy as sc
-print('依赖包加载完毕')
+print('Dependencies loaded. / 依赖包加载完毕')
 
 
 def _make_cell_type_pairs(cell_types, block_same_type):
@@ -107,44 +107,55 @@ if __name__ == "__main__":
         os.makedirs(args.metadata_to)
 
     # =================== 读取 scRNA-seq 数据 ==================================
-    print('正在读取 scRNA-seq 数据...')
+    print('Reading scRNA-seq data... / 正在读取 scRNA-seq 数据...')
     adata = sc.read_h5ad(args.data_from)
-    print('数据读取完毕')
+    print('Data loaded. / 数据读取完毕')
 
     gene_count_before = len(list(adata.var_names))
     sc.pp.filter_genes(adata, min_cells=args.filter_min_cell)
     gene_count_after = len(list(adata.var_names))
-    print('基因过滤完毕：基因数从 %d 减少至 %d' % (gene_count_before, gene_count_after))
+    print('Gene filtering done: %d -> %d / 基因过滤完毕：基因数从 %d 减少至 %d'
+          % (gene_count_before, gene_count_after,
+             gene_count_before, gene_count_after))
 
     gene_ids = list(adata.var_names)
     n_cells = adata.obs_names.shape[0]
-    print('细胞总数：%d' % n_cells)
+    print('Total cells: %d / 细胞总数：%d' % (n_cells, n_cells))
 
     # =================== 细胞类型注释 =========================================
     if args.cell_type_col not in adata.obs.columns:
         raise ValueError(
-            '在 adata.obs 中未找到细胞类型列 "%s"。\n'
+            'Cell-type column \"%s\" not found in adata.obs.\n'
+            'Please set --cell_type_col to the correct column name.\n'
+            'Available columns: %s\n'
+            '在 adata.obs 中未找到细胞类型列 \"%s\"。\n'
             '请使用 --cell_type_col 指定正确的列名。\n'
-            '当前可用列：%s' % (args.cell_type_col, list(adata.obs.columns)))
+            '当前可用列：%s'
+            % (args.cell_type_col, list(adata.obs.columns),
+               args.cell_type_col, list(adata.obs.columns))
+        )
 
     cell_type_array = np.array(adata.obs[args.cell_type_col].astype(str))
     unique_cell_types = sorted(list(set(cell_type_array)))
-    print('发现 %d 种细胞类型：%s' % (len(unique_cell_types), unique_cell_types))
+    print('Found %d cell types: %s / 发现 %d 种细胞类型：%s'
+          % (len(unique_cell_types), unique_cell_types,
+             len(unique_cell_types), unique_cell_types))
 
     # =================== 量化归一化 ==========================================
-    print('正在进行 quantile normalization...')
+    print('Running quantile normalization... / 正在进行 quantile normalization...')
     temp = qnorm.quantile_normalize(
         np.transpose(sparse.csr_matrix.toarray(adata.X)))
     cell_vs_gene = np.transpose(temp)
-    print('量化归一化完毕，表达矩阵维度：', cell_vs_gene.shape)
+    print('Quantile normalization done. Matrix shape: %s / 量化归一化完毕，表达矩阵维度：%s'
+          % (cell_vs_gene.shape, cell_vs_gene.shape))
 
     gene_index = {gene: i for i, gene in enumerate(gene_ids)}
 
     # =================== 读取配受体数据库 =====================================
-    print('正在读取配受体数据库...')
+    print('Loading LR database... / 正在读取配受体数据库...')
     gene_info = {gene: '' for gene in gene_ids}
     df_lr = pd.read_csv(args.database_path, sep=',')
-    print('配受体数据库读取完毕')
+    print('LR database loaded. / 配受体数据库读取完毕')
 
     ligand_dict_dataset = defaultdict(list)
     for i in range(df_lr['Ligand'].shape[0]):
@@ -174,11 +185,13 @@ if __name__ == "__main__":
         for rec in l_r_pair[lig]:
             lr_id_to_pair[l_r_pair[lig][rec]] = (lig, rec)
 
-    print('数据集中配受体对总数：%d' % num_lr_pairs)
+    print('Total LR pairs in dataset: %d / 数据集中配受体对总数：%d'
+          % (num_lr_pairs, num_lr_pairs))
 
     # =================== 基因表达活跃百分位阈值 ================================
-    print('正在计算各细胞基因表达百分位阈值（阈值：%.1f%%）...'
-          % args.threshold_gene_exp)
+    print('Computing per-cell expression thresholds (%.1f%%) ... / '
+          '正在计算各细胞基因表达百分位阈值（阈值：%.1f%%）...'
+          % (args.threshold_gene_exp, args.threshold_gene_exp))
     cell_percentile = []
     for i in range(n_cells):
         y = sorted(cell_vs_gene[i])
@@ -195,10 +208,10 @@ if __name__ == "__main__":
                 cutoff = np.percentile(y, new_th)
                 times += 1
         cell_percentile.append(cutoff)
-    print('基因表达阈值计算完毕')
+    print('Expression thresholds computed. / 基因表达阈值计算完毕')
 
     # =================== 全枚举：计算每个（细胞类型对, 配受体对）的通讯分数 ======
-    print('正在枚举所有跨细胞类型活跃配受体通讯（全枚举模式）...')
+    print('Enumerating active LR communications... / 正在枚举所有跨细胞类型活跃配受体通讯（全枚举模式）...')
 
     ct_pair_lr_score_sum = defaultdict(float)
     ct_pair_lr_count = defaultdict(int)
@@ -212,7 +225,9 @@ if __name__ == "__main__":
         sender_cells = [i for i in range(n_cells)
                         if cell_vs_gene[i][gene_col] >= cell_percentile[i]]
         if len(sender_cells) == 0:
-            print('%d/%d 配体基因已处理' % (g_idx + 1, len(ligand_list)), end='\r')
+            print('Processed ligands %d/%d / %d/%d 配体基因已处理'
+                  % (g_idx + 1, len(ligand_list),
+                     g_idx + 1, len(ligand_list)), end='\r')
             continue
 
         for gene_rec in ligand_dict_dataset[gene]:
@@ -246,21 +261,28 @@ if __name__ == "__main__":
                     lr_total_score_sum[relation_id] += communication_score
                     total_active += 1
 
-        print('%d/%d 配体基因已处理' % (g_idx + 1, len(ligand_list)), end='\r')
+        print('Processed ligands %d/%d / %d/%d 配体基因已处理'
+              % (g_idx + 1, len(ligand_list),
+                 g_idx + 1, len(ligand_list)), end='\r')
 
     print('')
-    print('共发现 %d 条活跃通讯记录（按细胞对×配受体对计数）' % total_active)
+    print('Active communications: %d / 共发现 %d 条活跃通讯记录（按细胞对×配受体对计数）'
+          % (total_active, total_active))
 
     # =================== 构建细胞类型对列表 ===================================
     cp_to_id, cp_id_to_pair = _make_cell_type_pairs(
         unique_cell_types, args.block_same_type)
     num_cp_pairs = len(cp_to_id)
-    print('细胞类型对组合数（M）：%d' % num_cp_pairs)
+    print('Cell-type pairs (M): %d / 细胞类型对组合数（M）：%d'
+          % (num_cp_pairs, num_cp_pairs))
 
     # =================== 选择活跃度最高的 LR 对 ================================
     active_lr_ids = list(lr_total_score_sum.keys())
     if len(active_lr_ids) == 0:
-        raise RuntimeError('未检测到任何活跃配受体对，请检查阈值设置或数据库。')
+        raise RuntimeError(
+            'No active LR pairs detected. Please check thresholds or database.\n'
+            '未检测到任何活跃配受体对，请检查阈值设置或数据库。'
+        )
 
     sorted_lr_ids = sorted(
         active_lr_ids,
@@ -276,7 +298,8 @@ if __name__ == "__main__":
     selected_lr_ids = sorted(selected_lr_ids)
     old_to_new_lr = {old_id: new_id for new_id, old_id in enumerate(selected_lr_ids)}
 
-    print('筛选后 LR 对数量（N）：%d' % len(selected_lr_ids))
+    print('Selected LR pairs (N): %d / 筛选后 LR 对数量（N）：%d'
+          % (len(selected_lr_ids), len(selected_lr_ids)))
 
     # =================== 构建 LR Token 矩阵 ====================================
     X_lr = np.zeros((len(selected_lr_ids), num_cp_pairs), dtype=np.float32)
@@ -291,7 +314,7 @@ if __name__ == "__main__":
 
     if args.log1p == 1:
         X_lr = np.log1p(X_lr)
-        print('已对通讯分数执行 log1p 压缩')
+        print('Applied log1p to scores. / 已对通讯分数执行 log1p 压缩')
 
     lr_total_score = np.array(
         [lr_total_score_sum[old_id] for old_id in selected_lr_ids],
@@ -304,7 +327,8 @@ if __name__ == "__main__":
 
     # =================== 保存输出 =============================================
     output_path = args.data_to + args.data_name + '_lrpair_mae_tokens'
-    print('正在保存 LR Token 矩阵至：%s' % output_path)
+    print('Saving LR token matrix: %s / 正在保存 LR Token 矩阵至：%s'
+          % (output_path, output_path))
     with gzip.open(output_path, 'wb') as fp:
         pickle.dump([X_lr, lr_id_to_pair_selected, cp_id_to_pair, lr_total_score], fp)
 
@@ -316,6 +340,7 @@ if __name__ == "__main__":
         f.write('top_lr_pairs 参数：%d\n' % args.top_lr_pairs)
         f.write('log1p 压缩：%s\n' % ('yes' if args.log1p == 1 else 'no'))
 
-    print('元数据保存至：%s' % meta_path)
-    print('预处理完毕。')
-    print('下一步：运行 run_CellNEST_lrpair_mae_scrna.py 进行 MAE 训练。')
+    print('Metadata saved: %s / 元数据保存至：%s' % (meta_path, meta_path))
+    print('Preprocessing complete. / 预处理完毕。')
+    print('Next: run run_CellNEST_lrpair_mae_scrna.py for MAE training. / '
+          '下一步：运行 run_CellNEST_lrpair_mae_scrna.py 进行 MAE 训练。')

@@ -69,13 +69,13 @@ if __name__ == "__main__":
 
     # =================== 加载嵌入向量 =========================================
     embed_file = args.embedding_path + model_tag + '_lrpair_mae_embed'
-    print('正在加载嵌入向量：%s' % embed_file)
+    print('Loading embeddings: %s / 正在加载嵌入向量：%s' % (embed_file, embed_file))
     with gzip.open(embed_file, 'rb') as fp:
         embeddings = pickle.load(fp)
 
     # =================== 加载 LR 对映射 =======================================
     token_file = args.input_graph + args.data_name + '_lrpair_mae_tokens'
-    print('正在加载 LR 对映射：%s' % token_file)
+    print('Loading LR mapping: %s / 正在加载 LR 对映射：%s' % (token_file, token_file))
     with gzip.open(token_file, 'rb') as fp:
         payload = pickle.load(fp)
     lr_id_to_pair = payload[1]
@@ -84,7 +84,7 @@ if __name__ == "__main__":
         raise ValueError('嵌入数量与 LR 对数量不一致，请确认训练数据与聚类数据一致。')
 
     # =================== Leiden 聚类 ==========================================
-    print('开始 Leiden 聚类...')
+    print('Running Leiden clustering... / 开始 Leiden 聚类...')
     adata = sc.AnnData(X=embeddings)
     sc.pp.neighbors(adata, n_neighbors=args.n_neighbors, metric=args.metric)
 
@@ -121,6 +121,6 @@ if __name__ == "__main__":
     summary_csv = args.output_path + model_tag + '_lrpair_mae_module_summary.csv'
     summary.to_csv(summary_csv, index=False)
 
-    print('聚类结果保存至：%s' % output_csv)
-    print('模块统计保存至：%s' % summary_csv)
-    print('完成。')
+    print('Clustering saved: %s / 聚类结果保存至：%s' % (output_csv, output_csv))
+    print('Module summary saved: %s / 模块统计保存至：%s' % (summary_csv, summary_csv))
+    print('Done. / 完成。')
