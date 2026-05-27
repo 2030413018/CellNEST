@@ -50,6 +50,18 @@ elif [ $1 = "preprocess_scrna" ]
 then
   shift
   python -u data_preprocess_CellNEST.py --data_type scrna $@
+elif [ $1 = "preprocess_lrpair_mae_scrna" ]
+then
+  shift
+  python -u data_preprocess_lrpair_mae_scrna_CellNEST.py $@
+elif [ $1 = "run_lrpair_mae_scrna" ]
+then
+  shift
+  python -u run_CellNEST_lrpair_mae_scrna.py $@
+elif [ $1 = "cluster_lrpair_mae" ]
+then
+  shift
+  python -u cluster_lrpair_mae_modules.py $@
 elif [ $1 = "downstream" ] 
 then
   shift
@@ -59,6 +71,5 @@ then
   shift
   python -u confidence_interval_CellNEST.py $@
 fi
-
 
 

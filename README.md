@@ -141,6 +141,26 @@ For a detailed explanation of the available parameters and their usage, please s
 6. [CellNEST on MERFISH data after gene imputation using scRNA-seq data](vignette/integrate_scRNAseq_merfish.md)
 7. [Convert ST data in any format to anndata for easy manipulation by CellNEST](vignette/convert_to_anndata.md)
 8. [Running CellNEST on single-cell RNA-seq data without spatial coordinates](vignette/scrna_seq_usage.md)
+ 
+## scRNA-seq LR 对 MAE 共表达模块（无先验）  
+该流程基于 Masked Autoencoder + Set Attention，在不引入任何先验标签的情况下学习 LR 对共表达模块：  
+
+1. **预处理（构建 LR Token 矩阵）**  
+```
+cellnest preprocess_lrpair_mae_scrna --data_name='my_scrna' --data_from='path/to/my_data.h5ad' --cell_type_col='cell_type'
+```
+
+2. **训练 MAE 模型**  
+```
+cellnest run_lrpair_mae_scrna --data_name='my_scrna' --model_name='CellNEST_MAE_LR' --run_id=0
+```
+
+3. **Leiden 聚类输出共表达模块**  
+```
+cellnest cluster_lrpair_mae --data_name='my_scrna' --model_name='CellNEST_MAE_LR' --run_id=0
+```
+
+输出文件将保存至 `embedding_data/` 与 `output/` 目录，可直接用于模块生物学解析。  
 
    
     
