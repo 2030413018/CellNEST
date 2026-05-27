@@ -142,25 +142,25 @@ For a detailed explanation of the available parameters and their usage, please s
 7. [Convert ST data in any format to anndata for easy manipulation by CellNEST](vignette/convert_to_anndata.md)
 8. [Running CellNEST on single-cell RNA-seq data without spatial coordinates](vignette/scrna_seq_usage.md)
  
-## scRNA-seq LR 对 MAE 共表达模块（无先验）  
-该流程基于 Masked Autoencoder + Set Attention，在不引入任何先验标签的情况下学习 LR 对共表达模块：  
+## scRNA-seq LR-pair MAE co-expression modules (without priors) / scRNA-seq LR 对 MAE 共表达模块（无先验）  
+This workflow uses Masked Autoencoder + Set Attention to learn LR-pair co-expression modules without prior labels. / 该流程基于 Masked Autoencoder + Set Attention，在不引入任何先验标签的情况下学习 LR 对共表达模块：  
 
-1. **预处理（构建 LR Token 矩阵）**  
+1. **Preprocessing (build LR token matrix) / 预处理（构建 LR Token 矩阵）**  
 ```
 cellnest preprocess_lrpair_mae_scrna --data_name='my_scrna' --data_from='path/to/my_data.h5ad' --cell_type_col='cell_type'
 ```
 
-2. **训练 MAE 模型**  
+2. **Train the MAE model / 训练 MAE 模型**  
 ```
 cellnest run_lrpair_mae_scrna --data_name='my_scrna' --model_name='CellNEST_MAE_LR' --run_id=0
 ```
 
-3. **Leiden 聚类输出共表达模块**  
+3. **Run Leiden clustering to output co-expression modules / Leiden 聚类输出共表达模块**  
 ```
 cellnest cluster_lrpair_mae --data_name='my_scrna' --model_name='CellNEST_MAE_LR' --run_id=0
 ```
 
-输出文件将保存至 `embedding_data/` 与 `output/` 目录，可直接用于模块生物学解析。  
+Output files are saved to `embedding_data/` and `output/` and can be used directly for biological module analysis. / 输出文件将保存至 `embedding_data/` 与 `output/` 目录，可直接用于模块生物学解析。  
 
    
     
