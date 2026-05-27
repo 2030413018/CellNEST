@@ -276,7 +276,9 @@ if __name__ == "__main__":
     active_lr_ids = list(lr_total_score_sum.keys())
     if len(active_lr_ids) == 0:
         raise RuntimeError(
-            'No active LR pairs detected. Please check thresholds or database.'
+            'No active LR pairs detected. Consider lowering '
+            '--threshold_gene_exp (current: %.1f) or checking the LR database '
+            'and input expression matrix.' % args.threshold_gene_exp
         )
 
     sorted_lr_ids = sorted(

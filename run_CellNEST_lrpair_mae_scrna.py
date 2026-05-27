@@ -89,7 +89,8 @@ def sample_mask(x, mask_ratio, mask_nonzero_only):
     if num_candidates == 0:
         raise RuntimeError(
             'No maskable entries found in the input matrix. '
-            'Please check whether the input is all zeros.'
+            'Please verify preprocessing outputs and ensure the input '
+            'contains nonzero communication scores.'
         )
 
     num_mask = max(1, int(num_candidates * mask_ratio))

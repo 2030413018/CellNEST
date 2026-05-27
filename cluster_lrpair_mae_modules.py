@@ -81,7 +81,10 @@ if __name__ == "__main__":
     lr_id_to_pair = payload[1]
 
     if embeddings.shape[0] != len(lr_id_to_pair):
-        raise ValueError('嵌入数量与 LR 对数量不一致，请确认训练数据与聚类数据一致。')
+        raise ValueError(
+            'Embedding count does not match LR pair count. '
+            'Please ensure the clustering inputs match the training outputs.'
+        )
 
     # =================== Leiden 聚类 ==========================================
     print('Running Leiden clustering... / 开始 Leiden 聚类...')
