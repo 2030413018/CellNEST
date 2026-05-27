@@ -93,9 +93,11 @@ if __name__ == "__main__":
                      random_state=args.seed)
     except Exception as exc:
         raise RuntimeError(
+            'Leiden clustering failed. Please ensure leidenalg and igraph '
+            'are installed.\n'
             'Leiden 聚类失败。请确认已安装 leidenalg 与 igraph。\n'
             '例如：pip install leidenalg igraph\n'
-            '原始错误：%s' % exc
+            '原始错误 / Original error: %s' % exc
         )
 
     modules = adata.obs['module'].astype(str).tolist()
