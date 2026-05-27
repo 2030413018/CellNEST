@@ -146,6 +146,8 @@ if __name__ == "__main__":
                         help='随机种子值（仅在 --manual_seed=yes 时生效）')
     parser.add_argument('--log_interval', type=int, default=200,
                         help='多少轮打印一次损失（默认 200）')
+    parser.add_argument('--max_lr_pairs', type=int, default=4000,
+                        help='训练允许的最大 LR 对数量（默认 4000；<=0 表示不限制）')
     args = parser.parse_args()
 
     # =================== 路径拼接 =============================================
@@ -196,6 +198,15 @@ if __name__ == "__main__":
         f'Token matrix shape: N={num_lr}, M={num_cp} / '
         f'Token 矩阵维度：N={num_lr}, M={num_cp}'
     )
+    if args.max_lr_pairs > 0 and num_lr > args.max_lr_pairs:
+        raise RuntimeError(
+            'N_lr (%d) exceeds --max_lr_pairs (%d). '
+            'MAE training uses full self-attention over LR-pair tokens with '
+            'O(N_lr^2) memory/time complexity, which can be very slow or OOM. '
+            'Please lower --top_lr_pairs during preprocessing or increase '
+            '--max_lr_pairs with caution.'
+            % (num_lr, args.max_lr_pairs)
+        )
 
     X_tensor = torch.tensor(X_lr, dtype=torch.float, device=device)
     X_tensor = X_tensor.unsqueeze(0)  # batch size = 1
