@@ -89,7 +89,7 @@ def sample_mask(x, mask_ratio, mask_nonzero_only):
     if num_candidates == 0:
         raise RuntimeError(
             'No maskable entries found in the input matrix. '
-            '请检查输入矩阵是否全为零。'
+            'Please check whether the input is all zeros.'
         )
 
     num_mask = max(1, int(num_candidates * mask_ratio))

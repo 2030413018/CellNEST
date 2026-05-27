@@ -95,9 +95,8 @@ if __name__ == "__main__":
         raise RuntimeError(
             'Leiden clustering failed. Please ensure leidenalg and igraph '
             'are installed.\n'
-            'Leiden 聚类失败。请确认已安装 leidenalg 与 igraph。\n'
-            '例如：pip install leidenalg igraph\n'
-            '原始错误 / Original error: %s' % exc
+            'For example: pip install leidenalg igraph\n'
+            'Original error: %s' % exc
         )
 
     modules = adata.obs['module'].astype(str).tolist()

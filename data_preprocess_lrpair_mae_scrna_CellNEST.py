@@ -127,12 +127,8 @@ if __name__ == "__main__":
         raise ValueError(
             'Cell-type column \"%s\" not found in adata.obs.\n'
             'Please set --cell_type_col to the correct column name.\n'
-            'Available columns: %s\n'
-            '在 adata.obs 中未找到细胞类型列 \"%s\"。\n'
-            '请使用 --cell_type_col 指定正确的列名。\n'
-            '当前可用列：%s'
-            % (args.cell_type_col, list(adata.obs.columns),
-               args.cell_type_col, list(adata.obs.columns))
+            'Available columns: %s'
+            % (args.cell_type_col, list(adata.obs.columns))
         )
 
     cell_type_array = np.array(adata.obs[args.cell_type_col].astype(str))
@@ -280,8 +276,7 @@ if __name__ == "__main__":
     active_lr_ids = list(lr_total_score_sum.keys())
     if len(active_lr_ids) == 0:
         raise RuntimeError(
-            'No active LR pairs detected. Please check thresholds or database.\n'
-            '未检测到任何活跃配受体对，请检查阈值设置或数据库。'
+            'No active LR pairs detected. Please check thresholds or database.'
         )
 
     sorted_lr_ids = sorted(
