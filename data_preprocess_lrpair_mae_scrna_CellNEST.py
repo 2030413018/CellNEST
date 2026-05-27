@@ -57,6 +57,21 @@ def _make_cell_type_pairs(cell_types, block_same_type):
     return cp_to_id, cp_id_to_pair
 
 
+def _aggregate_active_scores_by_type(active_indices, scores, cell_type_array):
+    """按细胞类型聚合分数与计数。"""
+    grouped = {}
+    per_type_cell_scores = defaultdict(dict)
+    for idx in active_indices:
+        ct = cell_type_array[idx]
+        score = float(scores[idx])
+        if ct not in grouped:
+            grouped[ct] = [0.0, 0]
+        grouped[ct][0] += score
+        grouped[ct][1] += 1
+        per_type_cell_scores[ct][idx] = score
+    return grouped, per_type_cell_scores
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
@@ -208,6 +223,7 @@ if __name__ == "__main__":
                 cutoff = np.percentile(y, new_th)
                 times += 1
         cell_percentile.append(cutoff)
+    cell_percentile = np.array(cell_percentile)
     print('Expression thresholds computed. / 基因表达阈值计算完毕')
 
     # =================== 全枚举：计算每个（细胞类型对, 配受体对）的通讯分数 ======
@@ -222,8 +238,10 @@ if __name__ == "__main__":
 
     for g_idx, gene in enumerate(ligand_list):
         gene_col = gene_index[gene]
-        sender_cells = [i for i in range(n_cells)
-                        if cell_vs_gene[i][gene_col] >= cell_percentile[i]]
+        ligand_scores = cell_vs_gene[:, gene_col]
+        sender_cells = np.where(
+            (ligand_scores >= cell_percentile) & (ligand_scores > 0)
+        )[0]
         if len(sender_cells) == 0:
             print(
                 f'Processed ligands {g_idx + 1}/{len(ligand_list)} / '
@@ -231,37 +249,55 @@ if __name__ == "__main__":
                 end='\r'
             )
             continue
+        sender_grouped, sender_per_type_cell_scores = _aggregate_active_scores_by_type(
+            sender_cells, ligand_scores, cell_type_array
+        )
 
         for gene_rec in ligand_dict_dataset[gene]:
             rec_col = gene_index[gene_rec]
             relation_id = l_r_pair[gene][gene_rec]
 
-            receiver_cells = [j for j in range(n_cells)
-                              if cell_vs_gene[j][rec_col] >= cell_percentile[j]]
+            receptor_scores = cell_vs_gene[:, rec_col]
+            receiver_cells = np.where(
+                (receptor_scores >= cell_percentile) & (receptor_scores > 0)
+            )[0]
             if len(receiver_cells) == 0:
                 continue
+            receiver_grouped, receiver_per_type_cell_scores = _aggregate_active_scores_by_type(
+                receiver_cells, receptor_scores, cell_type_array
+            )
 
-            for i in sender_cells:
-                type_i = cell_type_array[i]
-                score_i = cell_vs_gene[i][gene_col]
-
-                for j in receiver_cells:
-                    if args.block_autocrine == 1 and i == j:
-                        continue
-                    type_j = cell_type_array[j]
+            for type_i, (sum_i, count_i) in sender_grouped.items():
+                for type_j, (sum_j, count_j) in receiver_grouped.items():
                     if args.block_same_type == 1 and type_i == type_j:
                         continue
 
-                    communication_score = score_i * cell_vs_gene[j][rec_col]
-                    if communication_score <= 0:
+                    pair_score_sum = sum_i * sum_j
+                    pair_count = count_i * count_j
+
+                    if args.block_autocrine == 1 and type_i == type_j:
+                        overlap_cells = (
+                            set(sender_per_type_cell_scores[type_i].keys())
+                            & set(receiver_per_type_cell_scores[type_j].keys())
+                        )
+                        if overlap_cells:
+                            overlap_score = sum(
+                                sender_per_type_cell_scores[type_i][cell_k]
+                                * receiver_per_type_cell_scores[type_j][cell_k]
+                                for cell_k in overlap_cells
+                            )
+                            pair_score_sum -= overlap_score
+                            pair_count -= len(overlap_cells)
+
+                    if pair_count <= 0 or pair_score_sum <= 0:
                         continue
 
                     ct_pair_key = (type_i, type_j)
                     key = (ct_pair_key, relation_id)
-                    ct_pair_lr_score_sum[key] += communication_score
-                    ct_pair_lr_count[key] += 1
-                    lr_total_score_sum[relation_id] += communication_score
-                    total_active += 1
+                    ct_pair_lr_score_sum[key] += pair_score_sum
+                    ct_pair_lr_count[key] += pair_count
+                    lr_total_score_sum[relation_id] += pair_score_sum
+                    total_active += pair_count
 
         print(
             f'Processed ligands {g_idx + 1}/{len(ligand_list)} / '
