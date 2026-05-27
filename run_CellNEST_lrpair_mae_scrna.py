@@ -25,6 +25,7 @@ import argparse
 import random
 import gzip
 import pickle
+import warnings
 from datetime import datetime
 
 import torch
@@ -146,6 +147,10 @@ if __name__ == "__main__":
                         help='随机种子值（仅在 --manual_seed=yes 时生效）')
     parser.add_argument('--log_interval', type=int, default=200,
                         help='多少轮打印一次损失（默认 200）')
+    parser.add_argument('--max_lr_tokens', type=int, default=0,
+                        help='训练时最多使用多少个 LR token；0 表示不截断（默认 0）')
+    parser.add_argument('--lr_token_warn_threshold', type=int, default=4000,
+                        help='当 LR token 数超过该值时打印复杂度告警（默认 4000）')
     args = parser.parse_args()
 
     # =================== 路径拼接 =============================================
@@ -196,6 +201,19 @@ if __name__ == "__main__":
         f'Token matrix shape: N={num_lr}, M={num_cp} / '
         f'Token 矩阵维度：N={num_lr}, M={num_cp}'
     )
+    if num_lr > args.lr_token_warn_threshold:
+        warnings.warn(
+            f'N_lr={num_lr} may cause very high memory/time usage because '
+            f'self-attention scales as O(N_lr^2). '
+            f'You can set --max_lr_tokens to cap LR tokens during training.'
+        )
+    if args.max_lr_tokens > 0 and num_lr > args.max_lr_tokens:
+        print(
+            f'Capping LR tokens from {num_lr} to {args.max_lr_tokens} for training '
+            f'/ 将训练 LR token 数从 {num_lr} 截断到 {args.max_lr_tokens}'
+        )
+        X_lr = X_lr[:args.max_lr_tokens, :]
+        num_lr, num_cp = X_lr.shape
 
     X_tensor = torch.tensor(X_lr, dtype=torch.float, device=device)
     X_tensor = X_tensor.unsqueeze(0)  # batch size = 1
