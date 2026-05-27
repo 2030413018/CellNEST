@@ -200,12 +200,11 @@ if __name__ == "__main__":
     )
     if args.max_lr_pairs > 0 and num_lr > args.max_lr_pairs:
         raise RuntimeError(
-            'N_lr (%d) exceeds --max_lr_pairs (%d). '
+            f'N_lr ({num_lr}) exceeds --max_lr_pairs ({args.max_lr_pairs}). '
             'MAE training uses full self-attention over LR-pair tokens with '
             'O(N_lr^2) memory/time complexity, which can be very slow or OOM. '
             'Please lower --top_lr_pairs during preprocessing or increase '
             '--max_lr_pairs with caution.'
-            % (num_lr, args.max_lr_pairs)
         )
 
     X_tensor = torch.tensor(X_lr, dtype=torch.float, device=device)
